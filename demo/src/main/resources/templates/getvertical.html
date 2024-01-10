@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Google Maps Example</title>
+    <style>
+        #map {
+            display: flex;
+            height: 700px;
+            width: 80%;
+            float: right;
+            margin-right: 0px;
+            margin-top: 15px;
+        }
+
+        #map-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 100%;
+            width: 100%;
+            background-color: rgba(255, 255, 255, 0.7);
+            z-index: 1;
+        }
+
+        #search-container {
+            position: relative;
+            top: 0;
+            left: 15px;
+            z-index: 2;
+            float: left;
+        }
+
+        #search-container input[type="text"],
+        #search-container button {
+            padding: 8px;
+            font-size: 16px;
+        }
+
+        #search-container input[type="text"] {
+            margin-right: 10px;
+        }
+
+        #search-container button {
+            margin-left: 10px;
+        }
+
+        .suggestion_container {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            width: 100%;
+            background-color: #fff;
+            border: 1px solid #ccc;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            display: none;
+            z-index: 1;
+        }
+
+        #search_input:focus+.suggestion_container {
+            display: block;
+        }
+
+        .suggestion_container .suggestion_item {
+            padding: 8px;
+            border-bottom: 1px solid #ddd;
+            cursor: pointer;
+        }
+    </style>
+    <!-- Include xlsx library -->
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDHhWzkvjs6H83yuGZg8HitBD8j3oa1v9w&callback=initMap" async defer></script>
+    <script lang="javascript" src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+
+    <script>
+        var map;
+        var infoWindow;
+        var markers = [];
+        var listOfMarker = [];
+        var polylines = [];
+        var label = 1;
+        var edges = [];
+        var vertical = [];
+        var check = "";
+        function initMap() {
+            var myLatLng = {
+                lat: 21.031369,
+                lng: 105.832756
+            };
+            map = new google.maps.Map(document.getElementById('map'), {
+                zoom: 16,
+                center: myLatLng
+            });
+
+            infoWindow = new google.maps.InfoWindow();
+
+            var r = [
+                '21.029706,105.830186', '21.029503,105.830652', '21.030087,105.830863', '21.030042545603244,105.83117668735157',
+                '21.030337,105.831325', '21.031238,105.831619', '21.031076,105.832356', '21.031400,105.832459',
+                '21.030461,105.835972', '21.030048,105.836950', '21.029570,105.836773', '21.029256961250898,105.83781679211185',
+                '21.029358484196646,105.83805150020241', '21.029676,105.838426', '21.029505,105.839196', '21.028538,105.839317',
+                '21.02837158298169,105.83989464622104', '21.02894921722917,105.84007464383356', '21.028992419703247,105.8405752086405',
+                '21.028488,105.840625', '21.028325980184256,105.84083406236043', '21.028837210765023,105.84112548706399', '21.028567,105.841580',
+                '21.028200,105.841565', '21.029978,105.843995', '21.030131,105.843952', '21.031765,105.844282', '21.031913,105.843850',
+                '21.035139,105.844442', '21.035839,105.841213', '21.035028,105.841050', '21.035192,105.839365', '21.036074,105.839489',
+                '21.036560,105.836559', '21.038967,105.836892', '21.039137,105.835642', '21.038222,105.835449', '21.038243,105.834933',
+                '21.037192,105.834642', '21.037192,105.834199', '21.036832,105.834099', '21.036793,105.834136', '21.034335,105.833566',
+                '21.034406,105.831977', '21.032964,105.831794', '21.032959,105.831343', '21.03230722720318,105.83134371524189', '21.032004,105.830697',
+                '21.031699,105.830443', '21.031689,105.830472', '21.030688,105.830398', '21.030634,105.830375', '21.030643,105.830275', '21.030367,105.830181',
+                '21.030309,105.830404', '21.030041,105.830336', '21.029718,105.830188'
+            ];
+
+            var flightPlanCoordinates = r.map(function (coord) {
+                return new google.maps.LatLng(parseFloat(coord.split(',')[0]), parseFloat(coord.split(',')[1]));
+            });
+
+            var flightPath = new google.maps.Polyline({
+                path: flightPlanCoordinates,
+                geodesic: true,
+                strokeColor: '#FC6480',
+                strokeOpacity: 0.8,
+                strokeWeight: 3
+            });
+            flightPath.setMap(map);
+
+            google.maps.event.addListener(map, 'click', function (event) {
+                setDestinationLocation(event.latLng);
+            });
+        }
+
+        function showInfoWindow(marker, index) {
+            infoWindow.setContent(marker.getPosition().lat().toFixed(6).toString() + ", " + marker.getPosition().lng().toFixed(6).toString());
+            infoWindow.open(map, marker);
+        }
+
+        function setDestinationLocation(location) {
+            marker = new google.maps.Marker({
+                position: location,
+                map: map,
+                label: label.toString(), // Add label to marker
+            });
+
+            marker.addListener('click', createMarkerClickListener(marker, label));
+
+            listOfMarker.push(marker);
+            vertical.push(label + "," + location.lat().toString() + "," + location.lng().toString());
+            markers.push(location);
+            label++;
+        }
+
+        function createMarkerClickListener(marker, index) {
+            return function () {
+                showInfoWindow(marker, index);
+            };
+        }
+
+        function removeLastMarker() {
+            markers.pop();
+            listOfMarker[listOfMarker.length - 1].setMap(null);
+            listOfMarker.pop();
+            vertical.pop();
+            label--;
+        }
+
+        function removeLastLine() {
+            polylines[polylines.length - 1].setMap(null);
+            polylines.pop();
+            console.log(edges);
+            if (check.toString() == "x") { console.log(edges.splice(-1,1)); document.getElementById('checker').value = ""; }
+            console.log(edges.splice(-1,1));
+        }
+
+        function drawPolyline() {
+            var fromLabel = document.getElementById('src').value;
+            var toLabel = document.getElementById('dest').value;
+            var checker = document.getElementById('checker').value;
+
+            if (isNaN(parseInt(fromLabel, 10)) || isNaN(parseInt(toLabel, 10))) {
+                alert('Please enter valid numeric labels for both source and destination.');
+                return;
+            }
+            if (checker.toString() === "x")
+                edges.push((parseInt(toLabel, 10) - 1) + "," + (parseInt(fromLabel, 10) - 1));
+
+            var sourcePosition = listOfMarker[parseInt(fromLabel, 10) - 1].getPosition();
+            var destinationPosition = listOfMarker[parseInt(toLabel, 10) - 1].getPosition();
+            edges.push((parseInt(fromLabel, 10) - 1) + "," + (parseInt(toLabel, 10) - 1));
+
+            var path = [sourcePosition, destinationPosition];
+            var polyline = new google.maps.Polyline({
+                path: path,
+                geodesic: true,
+                strokeColor: '#FC6480',
+                strokeOpacity: 0.8,
+                strokeWeight: 4
+            });
+
+            polylines.push(polyline);
+
+            for (var i = 0; i < polylines.length; i++) {
+                polylines[i].setMap(map);
+            }
+            check = checker;
+            document.getElementById('src').value = "";
+            document.getElementById('dest').value = "";
+            document.getElementById('checker').value = "";
+        }
+
+        function exportToExcel() {
+            if (listOfMarker.length === 0) {
+                alert('Không có marker nào để xuất.');
+                return;
+            }
+
+            const rows = listOfMarker.map((marker, index) => ({
+                label: index + 1, // Sử dụng index để đảm bảo label là số thứ tự (1-based)
+                latitude: marker.getPosition().lat().toFixed(6),
+                longitude: marker.getPosition().lng().toFixed(6),
+            }));
+
+            const ws = XLSX.utils.json_to_sheet(rows);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Markers');
+            XLSX.utils.sheet_add_aoa(ws, [
+                ["Label", "Vi do", "Kinh do"]
+            ], {
+                origin: "A1"
+            });
+            try {
+                XLSX.writeFile(wb, "markers.xlsx", {
+                    compression: true
+                });
+            } catch (error) {
+                console.error('Lỗi khi tạo file Excel:', error);
+                alert('Đã xảy ra lỗi khi tạo file Excel.');
+            }
+        }
+
+        function exportEdgeToExcel() {
+            if (edges.length === 0) {
+                alert('Không có cạnh nào để xuất.');
+                return;
+            }
+
+            const rows = edges.map((edge, index) => {
+                const [sourceIndex, destinationIndex] = edge.split(',').map(Number);
+                const sourceLabel = sourceIndex + 1;
+                const destinationLabel = destinationIndex + 1;
+
+                return {
+                    sourceLabel,
+                    destinationLabel
+                };
+            });
+
+            const ws = XLSX.utils.json_to_sheet(rows);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Edges');
+            XLSX.utils.sheet_add_aoa(ws, [
+                ["Source Label", "Destination Label"]
+            ], {
+                origin: "A1"
+            });
+            try {
+                XLSX.writeFile(wb, "edges.xlsx", {
+                    compression: true
+                });
+            } catch (error) {
+                console.error('Lỗi khi tạo file Excel:', error);
+                alert('Đã xảy ra lỗi khi tạo file Excel.');
+            }
+        }
+
+        google.maps.event.addDomListener(window, 'load', initMap);
+    </script>
+</head>
+
+<body>
+    <div style="width: 100%; display: flex;">
+        <div style="display: block; margin-right: 10px; margin-left: 5px; margin-top: 10px;">
+            <div style="display: flex;">
+                <input type="text" id="src" style="height: 25px;" placeholder="Đỉnh nguồn">
+            </div>
+
+            <div style="display: flex;">
+                <input type="text" id="dest" style="height: 25px;" placeholder="Đỉnh đích">
+            </div>
+            <div style="display: flex;">
+                <input type="text" id="checker" style="height: 25px;" placeholder="2 chieu">
+            </div>
+            <div style="display: flex; margin-top: 10px;">
+                <button onclick="drawPolyline()" style="margin-right: 8px;">DrawPoyline</button>
+                <button onclick="removeLastMarker()">RemoveLastMarker</button>
+            </div>
+            <div style="display: flex; margin-top: 10px;">
+                <button onclick="exportToExcel()" style="margin-right: 8px;">Export vertical To Excel</button>
+                <button onclick="exportEdgeToExcel()" style="margin-right: 8px;">Export edges To Excel</button>
+                <button onclick="removeLastLine()">RemoveLastLine</button>
+            </div>
+        </div>
+
+        <div id="map">
+            <div id="map-overlay"></div>
+        </div>
+    </div>
+</body>
+
+</html>

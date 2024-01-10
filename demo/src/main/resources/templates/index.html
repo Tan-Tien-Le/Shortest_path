@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Google Maps Example</title>
+    <link rel="stylesheet" href="/css/output.css" />
+    <script
+      src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDyNLkGVhnKcMxxtDn9yTzjPrXxsqMq08k&callback=initMap"
+      async
+      defer
+    ></script>
+
+    <script>
+      var map;
+      var sourcemarker;
+      var destmarker;
+      var infoWindow;
+      var issourceCoordinates = false;
+      var isdestinationCoordinates = false;
+      var startline= []
+      var endline = []
+      var pathCoordinates = []
+    var pathstartPolyline
+    var pathendPolyline
+    var pathPolyline
+      function initMap() {
+        var myLatLng = { lat: 21.031369, lng: 105.832756 };
+        map = new google.maps.Map(document.getElementById("map"), {
+          zoom: 16,
+          center: myLatLng,
+        });
+        infoWindow = new google.maps.InfoWindow();
+
+        getOutlines()
+          .then(function (outlineCoordinates) {
+            console.log("ve bien gioi");
+            var outlinePath = [];
+            for (var i = 0; i < outlineCoordinates.length; i++) {
+              var coordinate = outlineCoordinates[i].pos.split(", ");
+              var lat = parseFloat(coordinate[0]);
+
+              var lng = parseFloat(coordinate[1]);
+
+              var latLng = {
+                lat: lat,
+                lng: lng,
+              };
+              outlinePath.push(latLng);
+            }
+
+            var outlinePolygon = new google.maps.Polyline({
+              path: outlinePath,
+              strokeColor: "#FF0000",
+              strokeOpacity: 1,
+              strokeWeight: 2,
+              geodesic: true,
+            });
+
+            outlinePolygon.setMap(map);
+          })
+          .catch((error) => {
+            console.error(error);
+          });
+
+        map.addListener("click", function (event) {
+          console.log("Map clicked");
+          if (!issourceCoordinates && !isdestinationCoordinates) {
+            setSourceLocation(event.latLng);
+          } else if (issourceCoordinates && !isdestinationCoordinates) {
+            setDestinationLocation(event.latLng);
+          }
+        });
+      }
+
+      function setSourceLocation(location) {
+        if (sourcemarker) {
+          sourcemarker.setMap(null);
+        }
+        sourcemarker = new google.maps.Marker({
+          position: location,
+          map: map,
+          icon: "http://maps.google.com/mapfiles/ms/icons/red-dot.png",
+          title: "Source Location",
+        });
+
+        sourceCoordinates = location;
+        var latitude = location.lat().toFixed(6);
+        var longitude = location.lng().toFixed(6);
+
+        infoWindow.setContent(
+          "Source Latitude: " + latitude + "<br>Source Longitude: " + longitude
+        );
+        infoWindow.open(map, sourcemarker);
+
+        // Set tọa độ vào thẻ input
+        document.getElementById("src").value = latitude + "," + longitude;
+      }
+
+      function setDestinationLocation(location) {
+        if (destmarker) {
+          destmarker.setMap(null);
+        }
+        destmarker = new google.maps.Marker({
+          position: location,
+          map: map,
+          icon: "http://maps.google.com/mapfiles/ms/icons/blue-dot.png",
+          title: "Destination Location",
+        });
+
+        destinationCoordinates = location;
+        var latitude = location.lat().toFixed(6);
+        var longitude = location.lng().toFixed(6);
+
+        infoWindow.setContent(
+          "Destination Latitude: " +
+            latitude +
+            "<br>Destination Longitude: " +
+            longitude
+        );
+        infoWindow.open(map, destmarker);
+
+        // Set tọa độ vào thẻ input
+        document.getElementById("dest").value = latitude + "," + longitude;
+      }
+
+      function searchLocation() {
+        if (!issourceCoordinates && !isdestinationCoordinates)
+          issourceCoordinates = true;
+        else isdestinationCoordinates = true;
+      }
+
+      function resetInputs() {
+        document.getElementById("src").value = "";
+        document.getElementById("dest").value = "";
+        issourceCoordinates = false;
+        isdestinationCoordinates = false;
+   
+        if (sourcemarker) 
+          sourcemarker.setMap(null);
+        
+        if (destmarker) 
+          destmarker.setMap(null);
+        
+        if(startline) startline=[];
+        if(endline) endline=[];
+        if(pathCoordinates) pathCoordinates=[];
+        if(pathstartPolyline) pathstartPolyline.setMap(null);
+        if(pathendPolyline) pathendPolyline.setMap(null);
+        if(pathPolyline) pathPolyline.setMap(null);
+      }
+
+
+
+async function getOutlines() {
+  try {
+    const response = await fetch("http://localhost:8080/api/get-outlines");
+    if (!response.ok) {
+      throw new Error("Request failed");
+    }
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    throw error
+}
+}
+
+async function uploadFile(type) {
+        var fileInput,file
+        if(type==="fetch-outlines") fileInput = document.getElementById('file3');
+        else if(type==="fetch-verticals") fileInput = document.getElementById('file2');
+        else  fileInput = document.getElementById('file1');
+
+        file = fileInput.files[0];
+        if(!file) {window.alert("Please choose a file .xlsx")
+        return}
+
+        var formData = new FormData();
+        formData.append('file', file);
+
+    try {
+        const response = await fetch(`http://localhost:8080/api/${type}`, {
+            method: 'POST',
+            body: formData
+        });
+
+        if (response.ok) {
+            window.alert(`Import Successfully ${type === 'fetch-outlines' ? ", refresh the page" : ""}`);
+        } else {
+            window.alert("Import failure");
+        }
+
+        return response.json();
+    } catch (error) {
+        // Xử lý lỗi
+        console.error(error);
+    }
+      }
+
+
+
+      async function drawPath() {
+  try {
+   const start = document.getElementById("src").value.split(",");
+   const end = document.getElementById("dest").value.split(",");
+
+   const Input = {
+    head:{
+      x:parseFloat(start[0]),
+      y:parseFloat(start[1])
+    },
+    end:{
+      x:parseFloat(end[0]),
+      y:parseFloat(end[1])
+    }
+   }
+
+   const head = {
+      lat:parseFloat(start[0]),
+      lng:parseFloat(start[1])
+   }
+
+   const tail = {
+      lat:parseFloat(end[0]),
+      lng:parseFloat(end[1])
+   }
+
+   
+
+    const response = await fetch("http://localhost:8080/api/find-path",{
+          method: 'POST',
+          body: JSON.stringify(Input),
+           headers: {
+      "Content-Type": "application/json",
+    }
+        });
+    if (!response.ok) {
+      throw new Error("Request failed");
+    }
+    const data = await response.json();
+    console.log(data)
+
+
+     const nearesthead = {
+      lat:parseFloat(data[0].x),
+      lng:parseFloat(data[0].y)
+   }
+
+    const nearestend = {
+      lat:parseFloat(data[data.length-1].x),
+      lng:parseFloat(data[data.length-1].y)
+   }
+
+    // Assuming data contains the list of verticals for the path
+
+
+    // Create an array to store the path coordinates
+    
+
+    
+    startline.push(head)
+    startline.push(nearesthead)
+
+
+   
+    endline.push(tail)
+    endline.push(nearestend)
+
+      const lineSymbol = {
+    path: "M 0,-1 0,1",
+    strokeOpacity: 1,
+    scale: 4,
+  };
+
+    pathstartPolyline = new google.maps.Polyline({
+      path: startline,
+      strokeColor: "#00FF00", // Green color for the path
+      strokeOpacity: 0,
+      strokeWeight: 2,
+      icons: [
+      {
+        icon: lineSymbol,
+        offset: "0",
+        repeat: "20px",
+      },
+    ],
+      geodesic: true
+    });
+
+     pathendPolyline = new google.maps.Polyline({
+      path: endline,
+      strokeColor: "#00FF00", // Green color for the path
+      strokeOpacity: 0,
+      strokeWeight: 2,
+      icons: [
+      {
+        icon: lineSymbol,
+        offset: "0",
+        repeat: "20px",
+      },
+    ],
+      geodesic: true
+    });
+
+
+    // Iterate through the pathVerticals and extract coordinates
+    for (const vertical of data) {
+   
+      const lat = parseFloat(vertical.x);
+      const lng = parseFloat(vertical.y);
+
+      const latLng = {
+        lat: lat,
+        lng: lng
+      };
+
+      pathCoordinates.push(latLng);
+    }
+
+    // Create a Polyline to represent the path on the map
+    pathPolyline = new google.maps.Polyline({
+      path: pathCoordinates,
+      strokeColor: "#00FFFF", // Green color for the path
+      strokeOpacity: 1,
+      strokeWeight: 3,
+      geodesic: true
+    });
+
+    pathstartPolyline.setMap(map);
+
+     pathendPolyline.setMap(map);
+
+
+    pathPolyline.setMap(map);
+
+    return data;
+  } catch (error) {
+    console.error(error);
+    throw error;
+  }
+}
+
+google.maps.event.addDomListener(window, 'load', initMap);
+
+    </script>
+  </head>
+  <body>
+    <div class="flex">
+      <div id="map" class="w-2/3 h-screen"></div>
+
+      <div class="flex flex-col mt-20 ml-10">
+        <!-- Start input -->
+        <div class="mb-10">
+          <label for="src" class="hidden"></label>
+          <input
+            type="text"
+            id="src"
+            class="h-12 border border-gray-300 rounded px-2"
+            placeholder="Start"
+          />
+          <button
+            type="submit"
+            form="src"
+            onclick="searchLocation()"
+            class="ml-2 px-4 py-2 bg-blue-500 text-white rounded"
+          >
+            Confirm
+          </button>
+        </div>
+
+        <!-- Destination input -->
+        <div class="mb-10">
+          <label for="dest" class="hidden"></label>
+          <input
+            type="text"
+            id="dest"
+            class="h-12 border border-gray-300 rounded px-2"
+            placeholder="Destination"
+          />
+          <button
+            type="submit"
+            form="dest"
+            onclick="searchLocation()"
+            class="ml-2 px-4 py-2 bg-blue-500 text-white rounded"
+          >
+            Confirm
+          </button>
+        </div>
+
+        <!-- Shortest Path and Reset buttons -->
+        <div class="mb-10 space-x-2">
+          <button
+            onclick="drawPath()"
+            class="px-6 py-3 bg-green-500 text-white rounded"
+          >
+            Shortest Path
+          </button>
+          <button
+            onclick="resetInputs()"
+            class="px-6 py-3 bg-red-500 text-white rounded"
+          >
+            Reset
+          </button>
+        </div>
+
+        <!-- Import buttons and file inputs -->
+        <div class="space-y-2">
+          <div class="flex items-center">
+            <button
+              onclick="uploadFile('fetch-outlines')"
+              class="px-6 py-3 bg-blue-500 text-white rounded"
+            >
+              Import Outline
+            </button>
+            <input
+              type="file"
+              id="file3"
+              name="file3"
+              accept=".xlsx"
+              class="h-12 ml-2 border border-gray-300 rounded"
+            />
+          </div>
+          <div class="flex items-center">
+            <button
+              onclick="uploadFile('fetch-verticals')"
+              class="px-6 py-3 bg-blue-500 text-white rounded"
+            >
+              Import Vertical
+            </button>
+            <input
+              type="file"
+              id="file2"
+              name="file2"
+              accept=".xlsx"
+              class="h-12 ml-2 border border-gray-300 rounded"
+            />
+          </div>
+          <div class="flex items-center">
+            <button
+              onclick="uploadFile('fetch-edges')"
+              class="px-6 py-3 bg-blue-500 text-white rounded"
+            >
+              Import Edge
+            </button>
+            <input
+              type="file"
+              id="file1"
+              name="file1"
+              accept=".xlsx"
+              class="h-12 ml-2 border border-gray-300 rounded"
+            />
+
+          </div>
+          <br/>
+          <p style="font-size: 18px;">Don't have data ?</p>
+          <a href="/data" style="color: red; font-weight: bold; font-style: italic;">Click here</a>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
